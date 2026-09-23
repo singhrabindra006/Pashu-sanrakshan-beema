@@ -1,0 +1,12 @@
+node_modules/
+dist/
+uploads/
+.vscode-api.json
+!uploads/.gitkeep
+.env
+.env.*
+!.env.example
+firebase-service-account.json
+*.log
+npm-debug.log*
+.DS_Store

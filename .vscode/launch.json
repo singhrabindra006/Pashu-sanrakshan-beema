@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug API",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/src/server.js",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Free API port"
+    },
+    {
+      "name": "Flutter (USB)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://127.0.0.1:4000/api/v1"],
+      "preLaunchTask": "ADB reverse port 4000"
+    },
+    {
+      "name": "Flutter (Wi-Fi)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define-from-file=${workspaceFolder}/backend/.vscode-api.json"],
+      "preLaunchTask": "Write current Wi-Fi API URL"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + Flutter (USB)",
+      "configurations": ["Debug API", "Flutter (USB)"],
+      "stopAll": true
+    },
+    {
+      "name": "API + Flutter (Wi-Fi)",
+      "configurations": ["Debug API", "Flutter (Wi-Fi)"],
+      "stopAll": true
+    }
+  ]
+}
