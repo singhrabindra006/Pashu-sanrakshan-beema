@@ -4,6 +4,7 @@ const { assertDatabaseConnection, closePool } = require('./config/database');
 const { initialiseFirebase } = require('./config/firebase');
 const { ensureUploadDirectories } = require('./config/multer');
 const { lanIPv4s } = require('./core/utils/lanAddresses');
+const { adbReverse } = require('./core/utils/adbReverse');
 
 async function bootstrap() {
   ensureUploadDirectories();
@@ -26,6 +27,9 @@ async function bootstrap() {
       for (const ip of wifi) {
         console.info(`[http]   phone on Wi-Fi: http://${ip}:${config.port}${config.apiPrefix}`);
       }
+    }
+    if (!config.isProduction) {
+      void adbReverse(config.port);
     }
   });
 

@@ -87,14 +87,39 @@ class ApiClient {
   final Dio _dio;
   final FirebaseAuth _firebaseAuth;
   final SecureStorage _secureStorage;
+  PrefsStorage? _prefs;
+  DateTime? _lastProbe;
 
   Dio get dio => _dio;
 
   /// Probe USB / emulator / last Wi-Fi host and point Dio at the one that answers.
   Future<void> discoverHost(PrefsStorage prefs) async {
+    _prefs = prefs;
+    _lastProbe = DateTime.now();
     final resolved = await ApiHost.resolve(prefs);
     _dio.options.baseUrl = resolved;
   }
+
+  /// After a connection failure, re-probe (at most once per 10s) and report
+  /// whether the base URL changed so the caller can retry once.
+  Future<bool> _rediscover() async {
+    final prefs = _prefs;
+    if (prefs == null) return false;
+    final now = DateTime.now();
+    if (_lastProbe != null && now.difference(_lastProbe!) < const Duration(seconds: 10)) {
+      return false;
+    }
+    _lastProbe = now;
+    final previous = _dio.options.baseUrl;
+    final resolved = await ApiHost.resolve(prefs);
+    _dio.options.baseUrl = resolved;
+    return resolved != previous;
+  }
+
+  bool _isConnectionFailure(DioException error) =>
+      error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.connectionError ||
+      (error.type == DioExceptionType.unknown && error.error is SocketException);
 
   Future<String?> _idToken({bool forceRefresh = false}) async {
     final user = _firebaseAuth.currentUser;
@@ -221,8 +246,9 @@ class ApiClient {
 
   Future<Result<T>> _send<T>(
     Decoder<T> decoder,
-    Future<Response<dynamic>> Function() request,
-  ) async {
+    Future<Response<dynamic>> Function() request, {
+    bool retried = false,
+  }) async {
     try {
       final response = await request();
       final status = response.statusCode ?? 0;
@@ -236,6 +262,11 @@ class ApiClient {
       }
       return Result.failure(_fromBody(status, body));
     } on DioException catch (error) {
+      // The laptop may have changed Wi-Fi or USB was plugged in after launch:
+      // find the host that answers now and retry this request once.
+      if (!retried && _isConnectionFailure(error) && await _rediscover()) {
+        return _send(decoder, request, retried: true);
+      }
       return Result.failure(_translate(error));
     } catch (error) {
       return Result.failure(ServerException('Unexpected error: $error'));

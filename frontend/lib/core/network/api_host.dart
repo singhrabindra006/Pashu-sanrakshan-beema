@@ -34,32 +34,41 @@ class ApiHost {
     }.toList();
   }
 
+  /// Probes every candidate at once (max ~3s) and keeps the highest-priority
+  /// host that answered `/health`.
   static Future<String> resolve(PrefsStorage prefs) async {
     final dio = Dio(
       BaseOptions(
-        connectTimeout: const Duration(seconds: 2),
-        receiveTimeout: const Duration(seconds: 2),
+        connectTimeout: const Duration(seconds: 3),
+        receiveTimeout: const Duration(seconds: 3),
         validateStatus: (status) => status != null && status < 500,
       ),
     );
 
-    for (final candidate in candidates(prefs)) {
-      final health = _healthUrl(candidate);
-      try {
-        final response = await dio.get<dynamic>(health);
-        if (response.statusCode != null && response.statusCode! < 400) {
-          _baseUrl = candidate;
-          await prefs.setLastApiBaseUrl(candidate);
-          debugPrint('[api] reachable at $_baseUrl');
-          return candidate;
-        }
-      } catch (_) {
-        // Try the next host — USB, emulator and Wi-Fi are different.
+    final list = candidates(prefs);
+    final results = await Future.wait(list.map((candidate) => _isUp(dio, candidate)));
+
+    for (var i = 0; i < list.length; i++) {
+      if (results[i]) {
+        _baseUrl = list[i];
+        await prefs.setLastApiBaseUrl(_baseUrl);
+        debugPrint('[api] reachable at $_baseUrl');
+        return _baseUrl;
       }
     }
 
+    debugPrint('[api] no host answered; keeping $configuredBaseUrl');
     _baseUrl = configuredBaseUrl;
     return _baseUrl;
+  }
+
+  static Future<bool> _isUp(Dio dio, String candidate) async {
+    try {
+      final response = await dio.get<dynamic>(_healthUrl(candidate));
+      return response.statusCode != null && response.statusCode! < 400;
+    } catch (_) {
+      return false;
+    }
   }
 
   static String _healthUrl(String apiBase) {
